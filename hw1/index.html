@@ -1,7 +1,187 @@
-<html>
-	<head>
-	</head>
-	<body>
-		Homework 1 index.html here
-	</body>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<style>
+  body {
+    padding: 100px;
+    width: 1000px;
+    margin: auto;
+    text-align: left;
+    font-weight: 300;
+    font-family: 'Open Sans', sans-serif;
+    color: #121212;
+  }
+  h1, h2, h3, h4 {
+    font-family: 'Source Sans Pro', sans-serif;
+  }
+</style>
+<title>CS 184/284A Rasterizer</title>
+<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+<link href="https://fonts.googleapis.com/css?family=Open+Sans|Source+Sans+Pro" rel="stylesheet">
+</head>
+
+
+<body>
+
+<h1 align="left">CS 184/284A: Computer Graphics and Imaging, Spring 2024</h1>
+<h1 align="left">Homework 1: Rasterizer</h1>
+<h2 align="left">computergobrrrr: Tobias Worledge</h2>
+
+<a href="https://cal-cs184-student.github.io/hw-webpages-sp24-everbolt/">Writeup Webpage</a>
+
+<br><br>
+
+<div>
+
+<h2 align="middle">Overview</h2>
+<p>This assignment focused on developing a basic rasterizer, a core component in rendering 2D images from 3D models by converting vector graphics into a matrix of pixels for output on a screen. My implementation covers various aspects of rasterization, including edge detection, shading, and anti-aliasing techniques to smooth out jagged edges. I thoroughly enjoyed thinking carefully about how to render simple things that I have taken for granted when using digital screens for my entire life.</p>
+
+<h2 align="middle">Rasterization</h2>
+
+<h2 align="middle">Part 1: Drawing Single-Color Triangles</h2>
+
+<h3>Check if the triangle is defined clockwise</h3>
+<p>Because the orientation of the lines of the triangle effect our bounds calculation later, we have to ensure that the triangle lines "wind" counter-clockwise. We can do this by taking the dot product of two lines and using the right hand rule. If the z component of the dot product is negative, the triangle currently winds clockwise so we can swap the two lines and make the triangle wind counter-clockwise.</p>
+
+<h3>Find the bounding box</h3>
+<p>The first step of rasterizing a triangle is defining a "box" that contains all possible points of the triangle. This allows to avoid sampling every pixel on the screen which drastically improves efficiency.</p>
+
+<h3>Sample the pixels</h3>
+<p>We then iterate through each pixel within the bounding box. We can then use some geometry to check if the center of a pixel falls on the left side of each line (left based on the line pointing away from the perspective). If the pixel falls to the left of all three lines, it is within the triangle and we can render it via fill_pixel!</p>
+
+<h3>Efficiency</h3>
+<p>With the bounding box mentioned before, the workload of this method scales by the width * height of the triangle. This ensures that the algorithm will only check each pixel within the bounding box and no more.</p>
+
+<div align="middle">
+	<h3>Result of Rasterizating Sharp Triangles</h3>
+	<img src="images/basic4.png" align="middle" justify="center" width="400px"/>
+</div>
+
+<h2 align="middle">Part 2: Antialiasing by Supersampling</h2>
+
+<h3>Utility</h3>
+<p>Supersampling is useful for minimizing the effect of aliasing. As shown above, when rendering a sharp triangle, we get very weird behavior at sharp points. This is because the vectors may cover some marginal area of a pixel, but as long as it includes the center of the pixel, the pixel will be rendered. By supersampling, we get a more accurate estimate of how much area of the pixel is covered by the triangle.</p>
+
+<h3>Data Structure</h3>
+<p>To minimize aliasing, we can use a technique called supersampling where we take multiple samples from each pixel to gain a better understanding of the proportion of the pixel that is within the triangle. To do this, we need to store more information per pixel besides just a single color. Thus, we can create a <b>sample_buffer</b> structure that contains more sub-pixels. Specifically, it is a multiple of the size of the sample_buffer, where the multiple is the sampling size used.</p>
+
+<h3>Algorithm Changes</h3>
+<p>Now that we have a larger buffer for supersampling, we can iterate more finely through the pixels, sampling at fractional points within each pixel. Given that sample sizes are nice square numbers, we can use symmetric positional layouts for these samples, similar to the 4 pips on a die. This results in multiple colors per pixel. Given that we're working with solid-colored triangles right now, each pixel is either white or the triangle's color.</p>
+
+<h3>Downsampling</h3>
+<p>Now that we have our supersamples, we need to convert them into information for the original <b>sample_buffer</b>. To do this, we can find the average color across all super samples for each pixel. Logically, this seems reasonable with the basic case with solid color triangles. If 1/2 of the supersamples of a pixel are in the triangle, the pixel should be colored halfway between white and the triangle's color. This can be achieved by averaging each RGB channel of the supersamples.</p>
+
+<h3>Backwards Compatibility</h3>
+<p>It's important to note that implementing supersampling created small issues for existing methods that rendered other objects such as points or lines. Some time was spent ensuring that these other methods remained capable of functionally interfacing directly with the sample_buffer. There was an idea of allowing the <b>rasterize_line</b> and <b>rasterize_point</b> methods write directly to the sample_buffer, but I opted to abstract the logic to instead also write to the supersample_buffer to avoid possible problems in the future of writing over the rendered lines when the downsampling happened.</p>
+
+
+<div align="middle">
+  <table style="width:100%">
+    <tr>
+      <td>
+        <img src="images/basic4.png" align="middle" width="400px"/>
+        <figcaption align="middle">1 pixel "supersampling" which results in an island!</figcaption>
+      </td>
+      <td>
+        <img src="images/basic4_supersample4.png" align="middle" width="400px"/>
+        <figcaption align="middle">4 pixel supersampling reduces aliasing noticably, but there's still a faint island pixel.</figcaption>
+      </td>
+    </tr>
+    <br>
+    <tr>
+      <td>
+        <img src="images/basic4_supersample9.png" align="middle" width="400px"/>
+        <figcaption align="middle">9 pixel supersampling seems nicely remove the island.</figcaption>
+      </td>
+      <td>
+        <img src="images/basic4_supersample16.png" align="middle" width="400px"/>
+        <figcaption align="middle">16 pixel supersampling seems to provide little improvement over the 9 pixel supersampling example.</figcaption>
+      </td>
+    </tr>
+  </table>
+</div>
+
+<h2 align="middle">Part 3: Transforms</h2>
+
+<p>I wanted to experiment more with the combination of transforms, so I attempted to make the robot place its waist. To do this, I had to rotate the second segment of the arms to face inward and then transform the second segment of the arms to be closer to the robot's body. I also had to scale the length of the arms so they would reach the robot's body. It was an interesting task, because the order of operations (transforms) affected the result. With the svg file, I also noticed that these operations seem to apply inward to outward based on the nesting of \<\g\> elements. The importance of ordering transformations was mentioned in lecture and makes sense based on matrix multiplication, and it was noticable when ordering the rotation and transform.</p>
+
+<div align="middle">
+	<h3>Robot with hands on its waist</h3>
+	<img src="images/my_robot.png" align="middle" justify="center" width="400px"/>
+</div>
+
+<h2 align="middle">Part 4: Barycentric coordinates</h2>
+<p>Barycentric coordinates allow us to represent a point using 3 values <b>α, β, and γ</b> that represent the point's distance from each of the 3 sides of the triangle. This allows us to determine how "associated" a pixel should be with colors assigned to sides of a triangle which is really helpful for blending between colors.</p>
+<div align="middle">
+	<img src="images/barycentric_coordinates.jpg" align="middle" justify="center" width="400px"/>
+</div>
+
+<div align="middle">
+	<h3>Using this, we can create shades of colors across the triangles we render now.</h3>
+	<img src="images/gradient.png" align="middle" justify="center" width="400px"/>
+</div>
+
+<h2 align="middle">Part 5: "Pixel sampling" for texture mapping</h2>
+<p>Pixel sampling functions by finding the texel it should sample based on the barycentric coordinates of the pixel. We can achieve this by taking the produce between the barycentric coordinates of the pixel and the dimensions of the image that we want to use as the texture. We then use a sampling method, either nearest sampling or bilinear sampling to interpolate them. Nearest sampling just rounds the sample to the nearest integer, which creates a simple and pixelated result. In contrast, bilinear sampling uses three interpolations. It first interpolates between the two texels that are closest to the calculated sample point on both the x and y axes, and then it interpolates between these two results based on the exact fractional position of the sample point within the four-texel square. This method results in a smoother, more blended image because it takes into account the values of surrounding texels which functionally averages their values in.</p>
+
+<div align="middle">
+	<table style="width:100%">
+	  <tr>
+		<td>
+		  <img src="images/linear_supersample1.png" align="middle" width="400px"/>
+		  <figcaption align="middle">Linear with 1 pixel "supersampling"</figcaption>
+		</td>
+		<td>
+		  <img src="images/bilinear_supersample1.png" align="middle" width="400px"/>
+		  <figcaption align="middle">Bilinear with 1 pixel "supersampling"</figcaption>
+		</td>
+	  </tr>
+	  <br>
+	  <tr>
+		<td>
+		  <img src="images/linear_supersample16.png" align="middle" width="400px"/>
+		  <figcaption align="middle">Linear with 16 pixel supersampling</figcaption>
+		</td>
+		<td>
+		  <img src="images/bilinear_supersample16.png" align="middle" width="400px"/>
+		  <figcaption align="middle">Bilinear with 16 pixel supersampling</figcaption>
+		</td>
+	  </tr>
+	</table>
+  </div>
+
+<p>Bilinear sampling can be much more effective compared to linear sampling when the textures are viewed from at a sharp angle or father away. This is because the transitions between pixels can be sharper, so averaging color values based on neighbors can help reduce this. We can especially see this when examining the white lines on the edges of the maps in the images above.</p>
+
+<h2 align="middle">Part 6: "Level sampling" with mipmaps for texture mapping</h2>
+<p>Level sampling relies on mipmaps to sample the texture of an image at different resolutions which we call levels. We implemented this by first scaling the <b>uv</b> barycentric vector differences by the size of the texture and then take the log of the largest norm. For the sampling process, we either set the level at 0, round the level to the nearest integer, or we sample the nearest integer below and above the value and then interpolate them.</p>
+
+<p>Pixel sampling is the fastest and most efficient. However, it has the worst aliasing. With level sampling using mipmaps, aliasing is much better, but it uses more memory since multiple versions of the texture have to be stored. Taking multiple samples per pixel also reduces aliasing, but is slower as it takes more computational power and more memory (with a trivial implementation)</p>
+
+<div align="middle">
+	<table style="width:100%">
+	  <tr>
+		<td>
+		  <img src="images/level0_pnearest.png" align="middle" width="400px"/>
+		  <figcaption align="middle">L_ZERO P_NEAREST</figcaption>
+		</td>
+		<td>
+		  <img src="images/level0_plinear.png" align="middle" width="400px"/>
+		  <figcaption align="middle">L_ZERO P_LINEAR</figcaption>
+		</td>
+	  </tr>
+	  <br>
+	  <tr>
+		<td>
+		  <img src="images/lnearest_pnearest.png" align="middle" width="400px"/>
+		  <figcaption align="middle">L_NEAREST P_NEAREST</figcaption>
+		</td>
+		<td>
+		  <img src="images/lnearest_plinear.png" align="middle" width="400px"/>
+		  <figcaption align="middle">L_NEAREST P_LINEAR</figcaption>
+		</td>
+	  </tr>
+	</table>
+  </div>
+
+</body>
 </html>
